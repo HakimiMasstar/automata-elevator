@@ -1,0 +1,378 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Strict DFA Elevator Simulation - ICS3253</title>
+    <style>
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            display: flex;
+            margin: 0;
+            height: 100vh;
+            background-color: #f8f9fa;
+        }
+
+        /* --- Left Side: Physical Simulation --- */
+        #simulation-container {
+            width: 40%;
+            position: relative;
+            border-right: 3px solid #dee2e6;
+            background-color: white;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+        }
+
+        #building {
+            position: relative;
+            width: 300px;
+            height: 480px;
+            border-bottom: 4px solid #343a40;
+        }
+
+        .floor {
+            position: absolute;
+            width: 100%;
+            height: 120px;
+            border-bottom: 2px dashed #ced4da;
+            box-sizing: border-box;
+            display: flex;
+            align-items: flex-end;
+        }
+
+        #floor-4 { top: 0px; }
+        #floor-3 { top: 120px; }
+        #floor-2 { top: 240px; }
+        #floor-1 { top: 360px; border-bottom: none; }
+
+        .call-btn {
+            margin-bottom: 10px;
+            padding: 8px 16px;
+            font-size: 14px;
+            font-weight: bold;
+            cursor: pointer;
+            background-color: #007bff;
+            color: white;
+            border: none;
+            border-radius: 4px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.2);
+        }
+
+        .call-btn:active { background-color: #0056b3; }
+
+        #elevator-shaft {
+            position: absolute;
+            right: 50px;
+            bottom: 0;
+            width: 84px;
+            height: 100%;
+            background-color: #e9ecef;
+            border-left: 2px solid #adb5bd;
+            border-right: 2px solid #adb5bd;
+        }
+
+        #elevator {
+            width: 80px;
+            height: 100px;
+            background-color: #343a40;
+            position: absolute;
+            bottom: 0px; 
+            left: 2px;
+            border-radius: 2px;
+            display: flex;
+            justify-content: center;
+            overflow: hidden;
+        }
+
+        .door {
+            width: 50%;
+            height: 100%;
+            background-color: #ced4da;
+            border: 1px solid #6c757d;
+            box-sizing: border-box;
+            transition: transform 0.4s ease-in-out;
+        }
+
+        .door.left { transform-origin: left; }
+        .door.right { transform-origin: right; }
+
+        #elevator.doors-open .door.left { transform: scaleX(0.1); }
+        #elevator.doors-open .door.right { transform: scaleX(0.1); }
+
+        /* --- Right Side: Fixed Grid DFA Diagram --- */
+        #dfa-container {
+            width: 60%;
+            position: relative;
+            background-color: #f1f3f5;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            flex-direction: column;
+        }
+
+        .dfa-title {
+            font-size: 24px;
+            color: #343a40;
+            margin-bottom: 20px;
+        }
+
+        /* Fixed 600x600 wrapper for perfect SVG alignment */
+        .dfa-wrapper {
+            position: relative;
+            width: 600px;
+            height: 600px;
+        }
+
+        .node {
+            width: 100px;
+            height: 100px;
+            border-radius: 50%;
+            background-color: white;
+            border: 4px solid #adb5bd;
+            position: absolute;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            font-weight: bold;
+            font-size: 14px;
+            text-align: center;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+            transition: all 0.3s ease;
+            z-index: 2;
+            transform: translate(-50%, -50%); /* Centers the node on exact X/Y */
+        }
+
+        .node.active {
+            background-color: #40c057;
+            color: white;
+            border-color: #2b8a3e;
+            transform: translate(-50%, -50%) scale(1.15);
+            box-shadow: 0 0 20px rgba(64, 192, 87, 0.6);
+        }
+
+        /* Exact Pixel Positioning for Nodes */
+        #node-idle { top: 300px; left: 100px; }
+        #node-up { top: 100px; left: 300px; }
+        #node-down { top: 500px; left: 300px; }
+        #node-doors { top: 300px; left: 500px; }
+
+        /* SVG Arrows and Labels */
+        svg {
+            position: absolute;
+            top: 0; left: 0;
+            width: 100%; height: 100%;
+            pointer-events: none;
+            z-index: 1;
+        }
+        path, line {
+            stroke: #868e96;
+            stroke-width: 2.5;
+            fill: none;
+            marker-end: url(#arrowhead);
+        }
+        text.label {
+            font-family: monospace;
+            font-size: 14px;
+            font-weight: bold;
+            fill: #495057;
+            background-color: white;
+        }
+        
+        .transition-active {
+            stroke: #e03131;
+            stroke-width: 4;
+            transition: stroke 0.2s, stroke-width 0.2s;
+        }
+
+        .legend {
+            position: absolute;
+            bottom: -40px;
+            width: 100%;
+            text-align: center;
+            font-family: monospace;
+            font-weight: bold;
+            color: #495057;
+        }
+    </style>
+</head>
+<body>
+
+    <div id="simulation-container">
+        <div id="building">
+            <div class="floor" id="floor-4"><button class="call-btn" onclick="requestFloor(4)">F4</button></div>
+            <div class="floor" id="floor-3"><button class="call-btn" onclick="requestFloor(3)">F3</button></div>
+            <div class="floor" id="floor-2"><button class="call-btn" onclick="requestFloor(2)">F2</button></div>
+            <div class="floor" id="floor-1"><button class="call-btn" onclick="requestFloor(1)">F1</button></div>
+
+            <div id="elevator-shaft">
+                <div id="elevator">
+                    <div class="door left"></div>
+                    <div class="door right"></div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div id="dfa-container">
+        <h2 class="dfa-title">Strict DFA Transition Map</h2>
+        
+        <div class="dfa-wrapper">
+            <svg viewBox="0 0 600 600">
+                <defs>
+                    <marker id="arrowhead" markerWidth="8" markerHeight="6" refX="7" refY="3" orient="auto">
+                        <polygon points="0 0, 8 3, 0 6" fill="#868e96" id="arrow-polygon"/>
+                    </marker>
+                </defs>
+                
+                <line id="line-idle-up" x1="125" y1="260" x2="260" y2="125" />
+                <text class="label" x="170" y="180">Cu</text>
+
+                <line id="line-idle-down" x1="125" y1="340" x2="260" y2="475" />
+                <text class="label" x="170" y="420">Cd</text>
+
+                <line id="line-up-doors" x1="340" y1="125" x2="475" y2="260" />
+                <text class="label" x="420" y="180">A</text>
+
+                <line id="line-down-doors" x1="340" y1="475" x2="475" y2="340" />
+                <text class="label" x="420" y="420">A</text>
+
+                <line id="line-doors-idle" x1="450" y1="300" x2="160" y2="300" />
+                <text class="label" x="300" y="290">T</text>
+
+                <path id="loop-idle" d="M 65 265 C -20 180, -20 420, 65 335" />
+                <text class="label" x="10" y="305">A, T</text>
+
+                <path id="loop-up" d="M 265 65 C 180 -20, 420 -20, 335 65" />
+                <text class="label" x="260" y="25">Cu, Cd, T</text>
+
+                <path id="loop-down" d="M 265 535 C 180 620, 420 620, 335 535" />
+                <text class="label" x="260" y="585">Cu, Cd, T</text>
+
+                <path id="loop-doors" d="M 535 265 C 620 180, 620 420, 535 335" />
+                <text class="label" x="535" y="305">Cu, Cd, A</text>
+            </svg>
+
+            <div id="node-idle" class="node active">IDLE</div>
+            <div id="node-up" class="node">UP</div>
+            <div id="node-down" class="node">DOWN</div>
+            <div id="node-doors" class="node">DOORS</div>
+            
+            <div class="legend">Σ = { Cu (Call Up), Cd (Call Down), A (Arrive), T (Timer) }</div>
+        </div>
+    </div>
+
+    <script>
+        const IDLE = "idle";
+        const MOVING_UP = "up";
+        const MOVING_DOWN = "down";
+        const DOORS_OPEN = "doors";
+
+        let currentState = IDLE;
+        let currentY = 0; 
+        let currentFloor = 1;
+        let targetFloor = 1;
+        let queue = [];
+        let doorTimer = 0;
+
+        const floorHeights = { 1: 0, 2: 120, 3: 240, 4: 360 };
+
+        const elevatorEl = document.getElementById("elevator");
+        const nodes = {
+            [IDLE]: document.getElementById("node-idle"),
+            [MOVING_UP]: document.getElementById("node-up"),
+            [MOVING_DOWN]: document.getElementById("node-down"),
+            [DOORS_OPEN]: document.getElementById("node-doors")
+        };
+
+        const lines = {
+            idle_up: document.getElementById("line-idle-up"),
+            idle_down: document.getElementById("line-idle-down"),
+            up_doors: document.getElementById("line-up-doors"),
+            down_doors: document.getElementById("line-down-doors"),
+            doors_idle: document.getElementById("line-doors-idle"),
+            loop_idle: document.getElementById("loop-idle"),
+            loop_up: document.getElementById("loop-up"),
+            loop_down: document.getElementById("loop-down"),
+            loop_doors: document.getElementById("loop-doors")
+        };
+
+        function requestFloor(floor) {
+            if (!queue.includes(floor)) queue.push(floor);
+        }
+
+        function triggerTransitionVisual(lineId) {
+            Object.values(lines).forEach(l => l.classList.remove("transition-active"));
+            if(lines[lineId]) {
+                lines[lineId].classList.add("transition-active");
+                setTimeout(() => lines[lineId].classList.remove("transition-active"), 300);
+            }
+        }
+
+        function updateVisuals() {
+            elevatorEl.style.bottom = currentY + "px";
+            if (currentState === DOORS_OPEN) elevatorEl.classList.add("doors-open");
+            else elevatorEl.classList.remove("doors-open");
+
+            Object.values(nodes).forEach(node => node.classList.remove("active"));
+            nodes[currentState].classList.add("active");
+        }
+
+        function gameLoop() {
+            // Mathematical Logic Processing
+            if (currentState === IDLE) {
+                if (queue.length > 0) {
+                    targetFloor = queue[0];
+                    if (targetFloor > currentFloor) { currentState = MOVING_UP; triggerTransitionVisual('idle_up'); }
+                    else if (targetFloor < currentFloor) { currentState = MOVING_DOWN; triggerTransitionVisual('idle_down'); }
+                    else { currentState = DOORS_OPEN; triggerTransitionVisual('loop_idle'); } 
+                } else {
+                    if(Math.random() < 0.02) triggerTransitionVisual('loop_idle');
+                }
+            }
+
+            let targetY = floorHeights[targetFloor];
+
+            if (currentState === MOVING_UP) {
+                if (currentY < targetY) {
+                    currentY += 4;
+                    if(Math.random() < 0.05) triggerTransitionVisual('loop_up'); 
+                } else {
+                    currentY = targetY;
+                    currentFloor = targetFloor;
+                    currentState = DOORS_OPEN;
+                    triggerTransitionVisual('up_doors');
+                }
+            } 
+            else if (currentState === MOVING_DOWN) {
+                if (currentY > targetY) {
+                    currentY -= 4;
+                    if(Math.random() < 0.05) triggerTransitionVisual('loop_down'); 
+                } else {
+                    currentY = targetY;
+                    currentFloor = targetFloor;
+                    currentState = DOORS_OPEN;
+                    triggerTransitionVisual('down_doors');
+                }
+            } 
+            else if (currentState === DOORS_OPEN) {
+                doorTimer++;
+                if(Math.random() < 0.05) triggerTransitionVisual('loop_doors'); 
+                
+                if (doorTimer > 60) { 
+                    doorTimer = 0;
+                    if (queue.length > 0) queue.shift();
+                    currentState = IDLE;
+                    triggerTransitionVisual('doors_idle');
+                }
+            }
+
+            updateVisuals();
+            requestAnimationFrame(gameLoop);
+        }
+
+        requestAnimationFrame(gameLoop);
+    </script>
+</body>
+</html>
