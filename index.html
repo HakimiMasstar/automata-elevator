@@ -339,7 +339,7 @@
 
             if (currentState === MOVING_UP) {
                 if (currentY < targetY) {
-                    currentY += 4;
+                    currentY += 1;
                     if(Math.random() < 0.05) triggerTransitionVisual('loop_up'); 
                 } else {
                     currentY = targetY;
@@ -350,7 +350,7 @@
             } 
             else if (currentState === MOVING_DOWN) {
                 if (currentY > targetY) {
-                    currentY -= 4;
+                    currentY -= 1;
                     if(Math.random() < 0.05) triggerTransitionVisual('loop_down'); 
                 } else {
                     currentY = targetY;
